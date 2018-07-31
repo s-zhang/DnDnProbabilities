@@ -175,8 +175,8 @@ class AttackBuilder:
         self.damage_bonus += bonus_damage
         return self
 
-    def adv(self):
-        self.is_adv = True
+    def adv(self, is_adv=True):
+        self.is_adv = is_adv
         return self
 
     def prof(self, proficiency_bonus: int):
@@ -196,8 +196,8 @@ class AttackBuilder:
         self.critical_threshold = critical_threshold
         return self
 
-    def gwm(self):
-        self.is_great_weapon_master_or_sharpshooter = True
+    def gwm(self, is_great_weapon_master_or_sharpshooter=True):
+        self.is_great_weapon_master_or_sharpshooter = is_great_weapon_master_or_sharpshooter
         return self
 
     def build(self):
@@ -221,6 +221,10 @@ class AttackBuilder:
         attack = self.build()
         return resolve_attack(attack, lea.coerce(armor_class)).damage
 
+"""
+def resolve_turn_attacks(*attacks, extra_damage_roll: Dist, damage_bonus: int) -> Distribution:
+    lea.redu
+"""
 
 assert 0.0486111111111111 == AttackBuilder(d(6)).resolve(15).p(6)
 
@@ -229,6 +233,8 @@ assert 1 == AttackBuilder(d(1)).attbon(-20).crit(0).resolve(0).p(2)
 AC = 15
 test_damage = AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).resolve(AC).times(2) + \
               AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).resolve(AC)
+
+
 
 assert 45.19125000000002 == test_damage.mean
 
@@ -240,6 +246,9 @@ if do_plot:
     cdf = at_least(test_damage)
 
     plot.clf()
-    plot.bar(cdf.keys(), cdf.values(), align='center')
+    plot.grid(b=None, which='major', axis='both')
     plot.ylabel('Probability')
+
+    plot.scatter(cdf.keys(), cdf.values())
+
     plot.show()
