@@ -234,14 +234,12 @@ assert 45.19125000000002 == test_damage.mean
 
 print(stats(test_damage))
 
-"""
-import matplotlib.pyplot as plot
-cdf = at_least(test_damage)
+do_plot = True
+if do_plot:
+    import matplotlib.pyplot as plot
+    cdf = at_least(test_damage)
 
-
-plot.ion()
-plot.clf()
-plot.bar(cdf.keys(), cdf.values(), align='center')
-plot.ylabel('Probability')
-plot.show()
-"""
+    plot.clf()
+    plot.bar(cdf.keys(), cdf.values(), align='center')
+    plot.ylabel('Probability')
+    plot.show()
