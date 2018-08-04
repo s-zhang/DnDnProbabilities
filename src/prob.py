@@ -1,9 +1,11 @@
-import lea
-from typing import Dict, Union, Callable, Any
-import operator
+from typing import Dict, Union, Callable, Any, Tuple, Iterable
 from collections import OrderedDict
-from lea import Lea
 from enum import Enum
+import functools
+import matplotlib.pyplot as plot
+import lea
+from lea import Lea
+from lea.flea2 import Flea2
 
 
 Distribution = Lea
@@ -12,13 +14,13 @@ Dist = Union[Distribution, int]
 
 def multiple_dice(number_of_dice: int, number_of_face: int) -> Distribution:
     single_die = die(number_of_face)
-    multiple_dice_ = single_die.times(number_of_dice, operator.__add__)
+    multiple_dice_ = single_die.times(number_of_dice)
     return multiple_dice_
 
 
-def die(number_of_face: int) -> Distribution:
-    face_probability = 1 / number_of_face
-    die_ = lea.pmf({i + 1: face_probability for i in range(number_of_face)})
+def die(number_of_faces: int) -> Distribution:
+    face_probability = 1 / number_of_faces
+    die_ = lea.pmf({i + 1: face_probability for i in range(number_of_faces)})
     return die_
 
 
@@ -80,15 +82,8 @@ def map_nested(pmf: Distribution, f: Callable[[Any], Dist]) -> Distribution:
     return pmf.map(lambda outcome: lea.coerce(f(outcome))).get_alea().flat()
 
 
-stat_roll = largest_n_out_of(d(6), 3, 4).map(sum)
-
-assert 0.016203703703703706 == stat_roll.p(18)
-
-second_best_roll = nth_largest_out_of(stat_roll, 2, 6)
-
-assert 0.003771297899701062 == second_best_roll.p(18)
-
-best_roll = nth_largest_out_of(stat_roll, 1, 6)
+def reduce_pmf(op: Callable[[Any, Any], Any], pmfs: Iterable[Distribution]) -> Distribution:
+    return functools.reduce(lambda pmf1, pmf2: Flea2(op, pmf1, pmf2).get_alea(), pmfs)
 
 
 class Attack:
@@ -141,7 +136,7 @@ def resolve_hit(attack: Attack, armor_class: Distribution) -> Distribution:
 def resolve_attack(attack: Attack, armor_class: Distribution) -> Distribution:
     def resolve_attack_damage(hit_outcome: HitOutcome) -> Distribution:
         if hit_outcome == HitOutcome.CRITICAL_HIT:
-            return attack.damage_base.times(2, operator.__add__) + attack.damage_bonus
+            return attack.damage_base.times(2) + attack.damage_bonus
         elif hit_outcome == HitOutcome.NORMAL_HIT:
             return attack.damage_base + attack.damage_bonus
         else:
@@ -221,20 +216,58 @@ class AttackBuilder:
         attack = self.build()
         return resolve_attack(attack, lea.coerce(armor_class)).damage
 
-"""
-def resolve_turn_attacks(*attacks, extra_damage_roll: Dist, damage_bonus: int) -> Distribution:
-    lea.redu
-"""
 
+def resolve_turn_attacks(*attacks,
+                         armor_class: Dist,
+                         extra_damage_roll: Dist = 0,
+                         damage_bonus: int = 0) -> Distribution:
+    def attack_outcome_to_crit_n_damage(attack_outcome: AttackOutcome) -> Tuple[bool, int]:
+        return attack_outcome.hit_outcome == HitOutcome.CRITICAL_HIT, attack_outcome.damage
+
+    def combine_crit_n_damage(crit_n_damage1: Tuple[bool, int], crit_n_damage2: Tuple[bool, int]) -> Tuple[bool, int]:
+        return crit_n_damage1[0] or crit_n_damage2[0], crit_n_damage1[1] + crit_n_damage2[1]
+    attacks = map(lambda attack: resolve_attack(attack, armor_class).map(attack_outcome_to_crit_n_damage), attacks)
+    total_crit_n_damage = reduce_pmf(combine_crit_n_damage, attacks)
+    total_damage = total_crit_n_damage[1] + lea.if_(total_crit_n_damage[0],
+                                                    lea.coerce(extra_damage_roll).times(2),
+                                                    extra_damage_roll) + damage_bonus
+    return total_damage
+
+
+def plot_stats(pmf: Distribution):
+    cdf = at_least(pmf)
+    plot.scatter(cdf.keys(), cdf.values())
+
+
+stat_roll = largest_n_out_of(d(6), 3, 4).map(sum)
+
+assert 0.016203703703703706 == stat_roll.p(18)
+
+second_best_roll = nth_largest_out_of(stat_roll, 2, 6)
+
+assert 0.003771297899701062 == second_best_roll.p(18)
+
+best_roll = nth_largest_out_of(stat_roll, 1, 6)
+
+
+test_damage0 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
+                                    AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
+                                    AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
+                                    armor_class=15)
+print(stats(test_damage0))
+
+test_damage1 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).gwm().dmgroll(d(3, 8)).crit(0).build(),
+                                    AttackBuilder(d(10)).prof(3).amod(3).gwm().dmgroll(d(3, 8)).crit(0).build(),
+                                    AttackBuilder(d(4)).prof(3).amod(3).gwm().dmgroll(d(2, 8)).crit(0).build(),
+                                    armor_class=15)
+print(stats(test_damage1))
+"""
 assert 0.0486111111111111 == AttackBuilder(d(6)).resolve(15).p(6)
-
 assert 1 == AttackBuilder(d(1)).attbon(-20).crit(0).resolve(0).p(2)
 
 AC = 15
 test_damage = AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).resolve(AC).times(2) + \
               AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).resolve(AC)
-
-
 
 assert 45.19125000000002 == test_damage.mean
 
@@ -242,13 +275,13 @@ print(stats(test_damage))
 
 do_plot = True
 if do_plot:
-    import matplotlib.pyplot as plot
-    cdf = at_least(test_damage)
 
     plot.clf()
     plot.grid(b=None, which='major', axis='both')
     plot.ylabel('Probability')
 
-    plot.scatter(cdf.keys(), cdf.values())
+    plot_stats(test_damage0)
+    plot_stats(test_damage1)
 
     plot.show()
+"""
