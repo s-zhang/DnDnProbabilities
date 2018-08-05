@@ -194,7 +194,7 @@ class IntegerInterval(Pmf[int]):
         probabilities = []
         threshold_index = threshold - self.offset
         for i in range(threshold_index):
-            probabilities.append(self.probabilities[i] ** 2)
+            probabilities.append(self.probabilities[i] * cdf[threshold_index])
         for i in range(threshold_index, len(self.probabilities)):
             probabilities.append(self.probabilities[i] * (1 + cdf[threshold_index]))
         return IntegerInterval(probabilities, self.offset)
@@ -330,7 +330,7 @@ class Attack:
                  damage_bonus: int,
                  attack_roll: Pmf[int],
                  attack_bonus: Pmf[int],
-                 critical_threshold):
+                 critical_threshold: int):
         self.damage_base = damage_base
         self.damage_bonus = damage_bonus
         self.attack_roll = attack_roll
@@ -416,6 +416,7 @@ class AttackBuilder:
         self.damage_base = damage_base
         self.damage_bonus = 0
         self.is_adv = False
+        self.is_lucky = False
         self.proficiency_bonus = 0
         self.ability_modifier = 0
         self.add_ability_modifier_to_damage = True
@@ -433,6 +434,10 @@ class AttackBuilder:
 
     def adv(self, is_adv=True):
         self.is_adv = is_adv
+        return self
+
+    def lucky(self, is_lucky=True):
+        self.is_lucky = is_lucky
         return self
 
     def prof(self, proficiency_bonus: int):
@@ -456,14 +461,24 @@ class AttackBuilder:
         self.is_great_weapon_master_or_sharpshooter = is_great_weapon_master_or_sharpshooter
         return self
 
+    def __lucky_roll(self, attack_roll: Pmf[int]):
+        return attack_roll.map_nested(lambda roll: attack_roll if roll == 1 else roll)
+
     def build(self):
         bonus_damage = self.damage_bonus
         if self.add_ability_modifier_to_damage:
             bonus_damage += self.ability_modifier
 
         attack_roll = d(20)
+
         if self.is_adv:
-            attack_roll = attack_roll.adv()
+            if self.is_lucky:
+                attack_roll = attack_roll.map_nested(lambda roll1: attack_roll.adv()
+                    if roll1 == 1 else self.__lucky_roll(attack_roll).map_pmf(lambda roll2: max(roll2, roll1)))
+            else:
+                attack_roll = attack_roll.adv()
+        elif self.is_lucky:
+            attack_roll = self.__lucky_roll(attack_roll)
 
         attack_bonus = self.attack_bonus + self.proficiency_bonus + self.ability_modifier
 
@@ -477,6 +492,10 @@ class AttackBuilder:
                       Pmf.coerce(attack_bonus),
                       self.critical_threshold)
 
+    def times(self, n: int) -> List[Pmf[int]]:
+        attack = self.build()
+        return [attack for _ in range(n)]
+
     def resolve(self, armor_class: IntDist) -> Pmf[int]:
         attack = self.build()
         return resolve_attack(attack, Pmf.coerce(armor_class)).map_pmf(lambda outcome: outcome.damage)
@@ -488,11 +507,13 @@ def resolve_turn_attacks(*attacks,
                          damage_bonus: int = 0) -> Pmf[int]:
     def resolve_turn_extra_damage(hit_outcome: HitOutcome) -> Pmf[int]:
         if hit_outcome == HitOutcome.CRITICAL_HIT:
-            return extra_damage_roll + extra_damage_roll + damage_bonus
+            return Pmf.coerce(extra_damage_roll).times(2) + damage_bonus
         elif hit_outcome == HitOutcome.NORMAL_HIT:
             return extra_damage_roll + damage_bonus
         else:
             return Pmf.coerce(0)
+    attacks = itertools.chain.from_iterable(map(lambda attack: attack if isinstance(attack, List) else [attack], attacks))
+    attacks = map(lambda attack: attack if isinstance(attack, Attack) else attack.build(), attacks)
     attacks = list(map(lambda attack: resolve_attack(attack, armor_class), attacks))
     hardest_hit: Pmf[HitOutcome] = functools.reduce(max, map(lambda attack: attack.hit_outcome, attacks))
     total_damage = sum(map(lambda attack: attack.damage, attacks)) + hardest_hit.map_nested(resolve_turn_extra_damage)
@@ -504,7 +525,7 @@ assert 0.25 == test_sum.p(3)
 assert 0.25 == test_sum.p(5)
 
 assert 0.28 == d(5).adv().p(4)
-assert 0.04000000000000001 == d(5).ge(3).p(2)
+assert 0.08000000000000002 == d(5).ge(3).p(2)
 assert 0.27999999999999997 == d(5).ge(3).p(3)
 
 test_joint = Joint([d(2), d(4)])
@@ -532,9 +553,12 @@ assert (1 + d(3)).p(3) == (d(3) + 1).p(3)
 test_attack0 = AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build()
 assert 0.6525 == resolve_hit(test_attack0, Pmf.coerce(15))
 
-test_damage0 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
-                                    AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
-                                    AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
+test_attack1 = AttackBuilder(d(1)).adv().lucky().build()
+hit_outcome1 = resolve_hit(test_attack1, 15)
+assert 0.10212500000000002 == hit_outcome1.p(HitOutcome.CRITICAL_HIT)
+
+test_damage0 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).times(2),
+                                    AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2),
                                     extra_damage_roll=d(2, 8),
                                     armor_class=15)
 test_damage0_stats = test_damage0.stats()
@@ -542,34 +566,45 @@ assert 52.81875000000001 == test_damage0_stats.mean
 assert 0.04861111111111111 == AttackBuilder(d(6)).resolve(15).p(6)
 assert 1.0000000000000002 == AttackBuilder(d(1)).attbon(-20).crit(0).resolve(0).p(2)
 
-test_damage1 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).gwm().dmgroll(d(3, 8)).crit(0).build(),
-                                    AttackBuilder(d(10)).prof(3).amod(3).gwm().dmgroll(d(3, 8)).crit(0).build(),
-                                    AttackBuilder(d(4)).prof(3).amod(3).gwm().dmgroll(d(2, 8)).crit(0).build(),
+test_damage1 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).gwm().dmgroll(d(3, 8)).crit(0).times(2),
+                                    AttackBuilder(d(4)).prof(3).amod(3).gwm().dmgroll(d(2, 8)).crit(0),
                                     armor_class=15)
 
 print(test_damage1.stats())
 
-AC = 15
+AC = 13
 
 # pam: polearm master
 # h's mark: hunter's mark
 builds = {
-    "paladin 5, barb 2, pam, gwm": test_damage0,
+    "paladin 5, barb 2, pam, gwm":
+        resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).times(2),
+                             AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2),
+                             extra_damage_roll=d(2, 8),
+                             armor_class=AC),
     "ranger 5, rogue 3, crossbow expert, sharpshooter":
-        resolve_turn_attacks(AttackBuilder(d(2, 6)).prof(3).amod(4).attbon(2).gwm().build(),
-                             AttackBuilder(d(2, 6)).prof(3).amod(4).attbon(2).gwm().build(),
-                             AttackBuilder(d(2, 6)).prof(3).amod(4).attbon(2).gwm().build(),
+        resolve_turn_attacks(AttackBuilder(d(2, 6)).prof(3).amod(4).attbon(2).gwm().times(3),
                              extra_damage_roll=d(8) + d(2, 6),
                              armor_class=AC),
     "ranger 5, pam, quarterstaff, h's mark, shield":
         # can get 1 lvl of druid or nature cleric to get shillelagh to change base damage to 1d8, but
         # damage increase is minimal. Better stack dex to avoid losing conc. of h's mark.
-        resolve_turn_attacks(AttackBuilder(d(6) + d(6)).prof(3).amod(5).attbon(2).build(),
-                             AttackBuilder(d(6) + d(6)).prof(3).amod(5).attbon(2).build(),
-                             AttackBuilder(d(6) + d(6)).prof(3).amod(5).attbon(2).build(),
-                             AttackBuilder(d(4) + d(6)).prof(3).amod(5).attbon(2).build(),
+        resolve_turn_attacks(AttackBuilder(d(6) + d(6)).prof(3).amod(5).dmgbon(2).times(3),
+                             AttackBuilder(d(4) + d(6)).prof(3).amod(5).dmgbon(2),
+                             armor_class=AC),
+    "monk 5, warlock 1, pam, hex":
+        resolve_turn_attacks(AttackBuilder(d(8) + d(6)).prof(3).amod(5).times(3),
+                             AttackBuilder(d(6) + d(6)).prof(3).amod(5).times(2),
+                             armor_class=AC),
+    "monk 5, ranger 3, warlock 1, pam, hex":
+        resolve_turn_attacks(AttackBuilder(d(8) + d(6)).prof(4).amod(5).dmgbon(2).times(3),
+                             AttackBuilder(d(6) + d(6)).prof(4).amod(5).dmgbon(2).times(2),
+                             armor_class=AC),
+    "barb 5, paladin 3, GWM, frenzy":
+        resolve_turn_attacks(AttackBuilder(d(6).ge(3).times(2)).prof(3).amod(4).adv().gwm().attbon(3).dmgbon(2).times(3),
                              armor_class=AC)
 }
+
 
 do_plot = True
 if do_plot:
@@ -582,7 +617,6 @@ if do_plot:
         plt.scatter(list(outcomes), list(cdf), label=label)
 
     plt.clf()
-    fig = plt.figure()
     ax = plt.subplot(111)
 
     plt.grid(b=None, which='major', axis='both')
@@ -593,7 +627,7 @@ if do_plot:
 
     # Shrink current axis's height by 10% on the bottom
     box = ax.get_position()
-    ax.set_position([box.x0, box.y0,
+    ax.set_position([box.x0, box.y0 + box.height * 0.2,
                      box.width, box.height * 0.9])
 
     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
