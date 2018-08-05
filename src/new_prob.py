@@ -41,17 +41,13 @@ class Pmf(Generic[TOutcome]):
 
     def map_pmf(self, f: Callable[[TOutcome], Any]) -> "Pmf[Any]":
         pmf = {}
-        outcome = None
         for outcome, probability in self.map(lambda o, p: (f(o), p)):
             pmf[outcome] = pmf.get(outcome, 0) + probability
-        if isinstance(outcome, int) and not isinstance(outcome, bool):
-            return IntegerInterval.from_pmf(pmf)
-        else:
-            return TablePmf(pmf)
+        return pmf_from_table(pmf)
 
     def map_nested(self, f: Callable[[TOutcome], Any]) -> "Pmf[Any]":
-        return functools.reduce(Pmf.union, self.map(lambda outcome, probability:
-                                                    self.coerce(f(outcome)).scale_probability(probability)))
+        return functools.reduce(self.__class__.union, self.map(lambda outcome, probability:
+                                                               self.coerce(f(outcome)).scale_probability(probability)))
 
     def __eq__(self, other) -> "Pmf[bool]":
         return self.bool_op(operator.__eq__, other)
@@ -93,7 +89,7 @@ class Pmf(Generic[TOutcome]):
         pmf = {}
         for outcome, probability in itertools.chain(self, other):
             pmf[outcome] = pmf.get(outcome, 0) + probability
-        return TablePmf(pmf)
+        return pmf_from_table(pmf)
 
     @classmethod
     def if_(cls, condition_pmf: "Pmf[bool]", then_pmf: AnyPmf, else_pmf: AnyPmf) -> "Pmf[Any]":
@@ -105,6 +101,14 @@ class Pmf(Generic[TOutcome]):
 
     def __getattr__(self, item):
         return self.map_pmf(lambda outcome: getattr(outcome, item))
+
+
+def pmf_from_table(table: Dict[TOutcome, float]) -> Pmf[TOutcome]:
+    outcome = next(iter(table.keys()))
+    if isinstance(outcome, int) and not isinstance(outcome, bool):
+        return IntegerInterval.from_table(table)
+    else:
+        return TablePmf(table)
 
 
 IntDist = Union[int, Pmf[int]]
@@ -132,12 +136,12 @@ class IntegerInterval(Pmf[int]):
         self.__std = None
 
     @classmethod
-    def from_pmf(cls, pmf: Dict[int, float]) -> "IntegerInterval":
-        min_outcome: int = min(pmf.keys())
-        max_outcome = max(pmf.keys())
+    def from_table(cls, table: Dict[int, float]) -> "IntegerInterval":
+        min_outcome: int = min(table.keys())
+        max_outcome = max(table.keys())
         size = max_outcome - min_outcome + 1
         probabilities = [0.0] * size
-        for outcome, probability in pmf.items():
+        for outcome, probability in table.items():
             probabilities[outcome - min_outcome] = probability
         return cls(probabilities, min_outcome)
 
@@ -179,10 +183,24 @@ class IntegerInterval(Pmf[int]):
 
     def adv(self):
         probabilities = []
+        cdf = self.cdf()
         for i in range(len(self.probabilities)):
-            probabilities.append(self.cdf()[i] * self.probabilities[i] +
-                                 self.probabilities[i] * (self.cdf()[i] + self.probabilities[i]))
+            probabilities.append(cdf[i] * self.probabilities[i] +
+                                 self.probabilities[i] * (cdf[i] + self.probabilities[i]))
         return IntegerInterval(probabilities, self.offset)
+
+    def ge(self, threshold: int):
+        cdf = self.cdf()
+        probabilities = []
+        threshold_index = threshold - self.offset
+        for i in range(threshold_index):
+            probabilities.append(self.probabilities[i] ** 2)
+        for i in range(threshold_index, len(self.probabilities)):
+            probabilities.append(self.probabilities[i] * (1 + cdf[threshold_index]))
+        return IntegerInterval(probabilities, self.offset)
+
+    def times(self, n, op=operator.__add__):
+        return functools.reduce(op, itertools.repeat(self, n))
 
     @staticmethod
     def __union_helper(interval1, interval2):
@@ -194,7 +212,7 @@ class IntegerInterval(Pmf[int]):
 
     def union(self, other):
         if not isinstance(other, IntegerInterval):
-            return super().union(other)
+            return super(self.__class__, self).union(other)
         if self.offset <= other.offset:
             return self.__union_helper(self, other)
         else:
@@ -320,7 +338,29 @@ class Attack:
         self.critical_threshold = critical_threshold
 
 
-class HitOutcome(Enum):
+class OrderedEnum(Enum):
+    def __ge__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value >= other.value
+        return NotImplemented
+
+    def __gt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value > other.value
+        return NotImplemented
+
+    def __le__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value <= other.value
+        return NotImplemented
+
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            return self.value < other.value
+        return NotImplemented
+
+
+class HitOutcome(OrderedEnum):
     CRITICAL_MISS = 0
     NORMAL_MISS = 1
     NORMAL_HIT = 2
@@ -350,7 +390,6 @@ def resolve_hit(attack: Attack, armor_class: Pmf[int]) -> Pmf[HitOutcome]:
             return HitOutcome.CRITICAL_MISS
         else:
             return Pmf.if_(roll + attack.attack_bonus >= armor_class, HitOutcome.NORMAL_HIT, HitOutcome.NORMAL_MISS)
-
     hit_outcome = attack.attack_roll.map_nested(resolve_hit_helper)
     return hit_outcome
 
@@ -447,11 +486,16 @@ def resolve_turn_attacks(*attacks,
                          armor_class: IntDist,
                          extra_damage_roll: IntDist = 0,
                          damage_bonus: int = 0) -> Pmf[int]:
+    def resolve_turn_extra_damage(hit_outcome: HitOutcome) -> Pmf[int]:
+        if hit_outcome == HitOutcome.CRITICAL_HIT:
+            return extra_damage_roll + extra_damage_roll + damage_bonus
+        elif hit_outcome == HitOutcome.NORMAL_HIT:
+            return extra_damage_roll + damage_bonus
+        else:
+            return Pmf.coerce(0)
     attacks = list(map(lambda attack: resolve_attack(attack, armor_class), attacks))
-    has_critical_hit = functools.reduce(lambda crit1, crit2: crit1 or crit2,
-                                        map(lambda attack: attack.hit_outcome == HitOutcome.CRITICAL_HIT, attacks))
-    total_damage = sum(map(lambda attack: attack.damage, attacks)) + \
-        Pmf.if_(has_critical_hit, extra_damage_roll + extra_damage_roll, extra_damage_roll) + damage_bonus
+    hardest_hit: Pmf[HitOutcome] = functools.reduce(max, map(lambda attack: attack.hit_outcome, attacks))
+    total_damage = sum(map(lambda attack: attack.damage, attacks)) + hardest_hit.map_nested(resolve_turn_extra_damage)
     return total_damage
 
 
@@ -460,15 +504,17 @@ assert 0.25 == test_sum.p(3)
 assert 0.25 == test_sum.p(5)
 
 assert 0.28 == d(5).adv().p(4)
+assert 0.04000000000000001 == d(5).ge(3).p(2)
+assert 0.27999999999999997 == d(5).ge(3).p(3)
 
 test_joint = Joint([d(2), d(4)])
 assert 0.125 == test_joint.p((1, 2))
 
 assert 0.25 == (d(4) == d(4)).p(True)
 
-test_union = TablePmf({1: 0.1, "a": 0.2}).union(TablePmf({2: 0.3, "a": 0.4}))
-assert 0.6000000000000001 == test_union.p("a")
-assert 0.1 == test_union.p(1)
+test_union = TablePmf({"a": 0.1, "b": 0.2}).union(TablePmf({"b": 0.4, "c": 0.3}))
+assert 0.6000000000000001 == test_union.p("b")
+assert 0.1 == test_union.p("a")
 
 test_union = d(2).union(d(2) + d(1))
 assert 1.0 == test_union.p(2)
@@ -489,17 +535,41 @@ assert 0.6525 == resolve_hit(test_attack0, Pmf.coerce(15))
 test_damage0 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
                                     AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
                                     AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build(),
+                                    extra_damage_roll=d(2, 8),
                                     armor_class=15)
 test_damage0_stats = test_damage0.stats()
-assert 45.191250000000046 == test_damage0_stats.mean
+assert 52.81875000000001 == test_damage0_stats.mean
+assert 0.04861111111111111 == AttackBuilder(d(6)).resolve(15).p(6)
+assert 1.0000000000000002 == AttackBuilder(d(1)).attbon(-20).crit(0).resolve(0).p(2)
 
 test_damage1 = resolve_turn_attacks(AttackBuilder(d(10)).prof(3).amod(3).gwm().dmgroll(d(3, 8)).crit(0).build(),
                                     AttackBuilder(d(10)).prof(3).amod(3).gwm().dmgroll(d(3, 8)).crit(0).build(),
                                     AttackBuilder(d(4)).prof(3).amod(3).gwm().dmgroll(d(2, 8)).crit(0).build(),
                                     armor_class=15)
+
 print(test_damage1.stats())
-assert 0.04861111111111111 == AttackBuilder(d(6)).resolve(15).p(6)
-assert 1.0000000000000002 == AttackBuilder(d(1)).attbon(-20).crit(0).resolve(0).p(2)
+
+AC = 15
+
+# pam: polearm master
+# h's mark: hunter's mark
+builds = {
+    "paladin 5, barb 2, pam, gwm": test_damage0,
+    "ranger 5, rogue 3, crossbow expert, sharpshooter":
+        resolve_turn_attacks(AttackBuilder(d(2, 6)).prof(3).amod(4).attbon(2).gwm().build(),
+                             AttackBuilder(d(2, 6)).prof(3).amod(4).attbon(2).gwm().build(),
+                             AttackBuilder(d(2, 6)).prof(3).amod(4).attbon(2).gwm().build(),
+                             extra_damage_roll=d(8) + d(2, 6),
+                             armor_class=AC),
+    "ranger 5, pam, quarterstaff, h's mark, shield":
+        # can get 1 lvl of druid or nature cleric to get shillelagh to change base damage to 1d8, but
+        # damage increase is minimal. Better stack dex to avoid losing conc. of h's mark.
+        resolve_turn_attacks(AttackBuilder(d(6) + d(6)).prof(3).amod(5).attbon(2).build(),
+                             AttackBuilder(d(6) + d(6)).prof(3).amod(5).attbon(2).build(),
+                             AttackBuilder(d(6) + d(6)).prof(3).amod(5).attbon(2).build(),
+                             AttackBuilder(d(4) + d(6)).prof(3).amod(5).attbon(2).build(),
+                             armor_class=AC)
+}
 
 do_plot = True
 if do_plot:
@@ -508,15 +578,25 @@ if do_plot:
         if name == "":
             label = str(pmf.stats())
         else:
-            label = "{}: {}".format(name, pmf.stats())
+            label = "{}: {}".format(pmf.stats(), name)
         plt.scatter(list(outcomes), list(cdf), label=label)
-        plt.legend()
 
     plt.clf()
+    fig = plt.figure()
+    ax = plt.subplot(111)
+
     plt.grid(b=None, which='major', axis='both')
     plt.ylabel('Probability')
 
-    plot_stats(test_damage0)
-    plot_stats(test_damage1)
+    for name, damage in builds.items():
+        plot_stats(damage, name)
+
+    # Shrink current axis's height by 10% on the bottom
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0,
+                     box.width, box.height * 0.9])
+
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
+              fancybox=True, shadow=True, ncol=1)
 
     plt.show()
