@@ -1,9 +1,3 @@
-# DnDnProbabilities
-
-Calculates and plot dice roll probabilities for DnD 5e.
-
-## Examples
-```python
 from dnd import *
 from utils import *
 
@@ -23,6 +17,3 @@ builds = {
 }
 
 plot_builds(builds)
-```
-
-![barb paladin build turn damage](/docs/example_plot.png "barb paladin build turn damage")

@@ -4,7 +4,6 @@ from pmf.Pmf import Pmf
 from .dice import d
 from .Attack import Attack
 import pmf
-from .resolvers import resolve_attack
 
 
 class AttackBuilder:
@@ -24,8 +23,8 @@ class AttackBuilder:
         self.damage_base += extra_damage_roll
         return self
 
-    def dmgbon(self, bonus_damage: int):
-        self.damage_bonus += bonus_damage
+    def dmgbon(self, damage_bonus: int):
+        self.damage_bonus += damage_bonus
         return self
 
     def adv(self, is_adv=True):
@@ -61,9 +60,9 @@ class AttackBuilder:
         return attack_roll.map_nested(lambda roll: attack_roll if roll == 1 else roll)
 
     def build(self):
-        bonus_damage = self.damage_bonus
+        damage_bonus = self.damage_bonus
         if self.add_ability_modifier_to_damage:
-            bonus_damage += self.ability_modifier
+            damage_bonus += self.ability_modifier
 
         attack_roll = d(20)
 
@@ -79,11 +78,11 @@ class AttackBuilder:
         attack_bonus = self.attack_bonus + self.proficiency_bonus + self.ability_modifier
 
         if self.is_great_weapon_master_or_sharpshooter:
-            bonus_damage += 10
+            damage_bonus += 10
             attack_bonus -= 5
 
         return Attack(pmf.to_pmf(self.damage_base),
-                      bonus_damage,
+                      damage_bonus,
                       attack_roll,
                       pmf.to_pmf(attack_bonus),
                       self.critical_threshold)
@@ -94,4 +93,4 @@ class AttackBuilder:
 
     def resolve(self, armor_class: IntDist) -> Pmf[int]:
         attack = self.build()
-        return resolve_attack(attack, pmf.to_pmf(armor_class)).map_pmf(lambda outcome: outcome.damage)
+        return attack.resolve(pmf.to_pmf(armor_class)).map_pmf(lambda outcome: outcome.damage)
