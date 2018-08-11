@@ -11,6 +11,7 @@ def plot_at_least(pmf: Pmf[int], name: str = ""):
         label = "{}: {}".format(pmf.stats(), name)
     plt.scatter(list(outcomes), list(cdf), label=label)
 
+
 def plot_builds(builds: Dict[str, Pmf[int]]):
     plt.clf()
     ax = plt.subplot(111)

@@ -97,10 +97,10 @@ class IPmfFactory:
     def from_table(self, table: Dict[TOutcome, float]) -> Pmf[TOutcome]:
         raise NotImplementedError
 
-    def joint(self, pmf1: Pmf[TOutcome], pmf2: Pmf[Any]) -> Pmf[Any]:
+    def joint(self, pmfs: List[Pmf[TOutcome]]) -> Pmf[Tuple]:
         raise NotImplementedError
 
-    def ints(probabilities: List[float], offset: int) -> Pmf[int]:
+    def ints(self, probabilities: List[float], offset: int) -> Pmf[int]:
         raise NotImplementedError
 
     def table(self, table: Dict[TOutcome, float]) -> Pmf[TOutcome]:

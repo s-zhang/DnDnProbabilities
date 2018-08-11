@@ -56,7 +56,8 @@ class AttackBuilder:
         self.is_great_weapon_master_or_sharpshooter = is_great_weapon_master_or_sharpshooter
         return self
 
-    def __lucky_roll(self, attack_roll: Pmf[int]):
+    @staticmethod
+    def __lucky_roll(attack_roll: Pmf[int]):
         return attack_roll.map_nested(lambda roll: attack_roll if roll == 1 else roll)
 
     def build(self):
@@ -86,10 +87,6 @@ class AttackBuilder:
                       attack_roll,
                       pmf.to_pmf(attack_bonus),
                       self.critical_threshold)
-
-    def times(self, n: int) -> List[Pmf[int]]:
-        attack = self.build()
-        return [attack for _ in range(n)]
 
     def resolve(self, armor_class: IntDist) -> Pmf[int]:
         attack = self.build()

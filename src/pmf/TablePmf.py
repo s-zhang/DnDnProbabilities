@@ -16,4 +16,4 @@ class TablePmf(Pmf[TOutcome]):
         return self.table[outcome]
 
     def scale_probability(self, scale: float):
-        return TablePmf({outcome: probability * scale for outcome, probability in self.table.items()}, self._pmf_factory)
+        return self._pmf_factory.table({outcome: probability * scale for outcome, probability in self.table.items()})

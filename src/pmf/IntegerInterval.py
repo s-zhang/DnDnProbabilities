@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import *
 import functools
 import itertools
@@ -63,11 +62,11 @@ class IntegerInterval(Pmf[int]):
             probabilities.append(0)
             for i in range(s - self.size + 1, min(other.size, s + 1)):
                 probabilities[s] += self.probabilities[s - i] * other.probabilities[i]
-        return IntegerInterval(probabilities, self.offset + other.offset, self._pmf_factory)
+        return self._pmf_factory.ints(probabilities, self.offset + other.offset)
 
     def __add__(self, other):
         if isinstance(other, int):
-            return IntegerInterval(self.probabilities, self.offset + other, self._pmf_factory)
+            return self._pmf_factory.ints(self.probabilities, self.offset + other)
         if self.size <= other.size:
             return self.__add_helper(other)
         else:
@@ -82,7 +81,7 @@ class IntegerInterval(Pmf[int]):
         for i in range(len(self.probabilities)):
             probabilities.append(cdf[i] * self.probabilities[i] +
                                  self.probabilities[i] * (cdf[i] + self.probabilities[i]))
-        return IntegerInterval(probabilities, self.offset, self._pmf_factory)
+        return self._pmf_factory.ints(probabilities, self.offset)
 
     def ge(self, threshold: int):
         cdf = self.cdf()
@@ -92,7 +91,7 @@ class IntegerInterval(Pmf[int]):
             probabilities.append(self.probabilities[i] * cdf[threshold_index])
         for i in range(threshold_index, len(self.probabilities)):
             probabilities.append(self.probabilities[i] * (1 + cdf[threshold_index]))
-        return IntegerInterval(probabilities, self.offset, self._pmf_factory)
+        return self._pmf_factory.ints(probabilities, self.offset)
 
     def times(self, n, op=operator.__add__):
         return functools.reduce(op, itertools.repeat(self, n))
@@ -102,7 +101,7 @@ class IntegerInterval(Pmf[int]):
                         [0] * max(0, other.offset + other.size - self.offset - self.size)
         for i in range(other.size):
             probabilities[other.offset - self.offset + i] += other.probabilities[i]
-        return IntegerInterval(probabilities, self.offset, self._pmf_factory)
+        return self._pmf_factory.ints(probabilities, self.offset)
 
     def union(self, other):
         if not isinstance(other, IntegerInterval):
@@ -113,7 +112,7 @@ class IntegerInterval(Pmf[int]):
             return other.__union_helper(self)
 
     def scale_probability(self, scale: float):
-        return IntegerInterval(list(map(lambda p: p * scale, self.probabilities)), self.offset, self._pmf_factory)
+        return self._pmf_factory.ints(list(map(lambda p: p * scale, self.probabilities)), self.offset)
 
     def p(self, outcome: int) -> float:
         return self.probabilities[outcome - self.offset]

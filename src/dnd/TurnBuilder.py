@@ -1,18 +1,18 @@
 from typing import *
 import pmf
-from pmf.Pmf import Pmf
 from .Attack import Attack
 from .AttackBuilder import AttackBuilder
 from .HitOutcome import HitOutcome
 import itertools
 import functools
-from .types import *
+from .types import IntDist
+from pmf.Pmf import Pmf
 
 
 class TurnBuilder:
     def __init__(self):
         self.attacks = []
-        self.turn_damage_roll = 0
+        self.turn_damage_roll = pmf.to_pmf(0)
         self.turn_damage_bonus = 0
 
     def attack(self, attack: Union[Attack, AttackBuilder], times: int = 1):
@@ -30,7 +30,8 @@ class TurnBuilder:
     def resolve(self, armor_class: IntDist) -> Pmf[int]:
         attack_outcomes = [attack.resolve(armor_class) for attack in self.attacks]
         hardest_hit: Pmf[HitOutcome] = functools.reduce(max, map(lambda outcome: outcome.hit_outcome, attack_outcomes))
-        total_damage = sum(map(lambda outcome: outcome.damage, attack_outcomes)) + hardest_hit.map_nested(self.resolve_turn_extra_damage)
+        total_damage = sum(map(lambda outcome: outcome.damage, attack_outcomes)) + \
+            hardest_hit.map_nested(self.resolve_turn_extra_damage)
         return total_damage
 
     def dmgroll(self, turn_damage_roll: IntDist):

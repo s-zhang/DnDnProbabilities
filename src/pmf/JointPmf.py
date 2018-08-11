@@ -38,4 +38,4 @@ class JointPmf(Pmf[Tuple]):
     def scale_probability(self, scale: float):
         pmfs = self.pmfs[:-1]
         pmfs.append(self.pmfs[-1].scale_probability(scale))
-        return Joint(pmfs, self._pmf_factory)
+        return self._pmf_factory.joint(pmfs)
