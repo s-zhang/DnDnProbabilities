@@ -1,4 +1,4 @@
-from typing import *
+from typing import TypeVar, List, Iterator, Tuple, Any, Callable
 import functools
 import operator
 import itertools
@@ -18,22 +18,25 @@ class JointPmf(Pmf[Tuple]):
                    itertools.product(*self.pmfs))
 
     @staticmethod
-    def aggregate_outcome_probabilities(aggregated_outcome_probability: List,
-                                        outcome_probability: Tuple[Any, float]) -> List:
+    def aggregate_outcome_probabilities(
+            aggregated_outcome_probability: List,
+            outcome_probability: Tuple[Any, float]) -> List:
         aggregated_outcome_probability[0].append(outcome_probability[0])
         aggregated_outcome_probability[1] *= outcome_probability[1]
         return aggregated_outcome_probability
 
     @staticmethod
-    def aggregate_to_tuple(aggregated_outcome_probability: List) -> Tuple[Tuple, float]:
-        return tuple(aggregated_outcome_probability[0]), aggregated_outcome_probability[1]
+    def aggregate_to_tuple(
+            aggregated_outcome_probability: List) -> Tuple[Tuple, float]:
+        return tuple(aggregated_outcome_probability[0]),\
+               aggregated_outcome_probability[1]
 
     def map_sub_pmf(self, f: Callable[[Pmf[Any], Any], Any], outcome: Tuple):
         return map(lambda op: f(*op), zip(self.pmfs, outcome))
 
     def p(self, outcome: Tuple) -> float:
-        return functools.reduce(operator.__mul__,
-                                self.map_sub_pmf(lambda pmf, pmf_outcome: pmf.p(pmf_outcome), outcome))
+        return functools.reduce(operator.__mul__, self.map_sub_pmf(
+            lambda pmf, pmf_outcome: pmf.p(pmf_outcome), outcome))
 
     def scale_probability(self, scale: float):
         pmfs = self.pmfs[:-1]

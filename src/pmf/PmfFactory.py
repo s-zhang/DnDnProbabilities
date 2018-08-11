@@ -1,4 +1,4 @@
-from typing import *
+from typing import TypeVar, List, Dict, Tuple, Any
 from .Pmf import Pmf, IPmfFactory
 from .IntegerInterval import IntegerInterval
 from .TablePmf import TablePmf
@@ -36,6 +36,12 @@ class PmfFactory(IPmfFactory):
     def const(self, constant: TOutcome) -> Pmf[TOutcome]:
         return ConstantPmf(constant, self)
 
-    def if_(self, condition_pmf: Pmf[bool], then_pmf: Any, else_pmf: Any) -> Pmf[Any]:
-        return self.from_object(then_pmf).scale_probability(condition_pmf.p(True)) \
-            .union(self.from_object(else_pmf).scale_probability(condition_pmf.p(False)))
+    def if_(self,
+            condition_pmf: Pmf[bool],
+            then_pmf: Any,
+            else_pmf: Any) -> Pmf[Any]:
+        scaled_then_pmf = self.from_object(then_pmf)\
+            .scale_probability(condition_pmf.p(True))
+        scaled_else_pmf = self.from_object(else_pmf)\
+            .scale_probability(condition_pmf.p(False))
+        return scaled_then_pmf.union(scaled_else_pmf)

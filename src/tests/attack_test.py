@@ -1,8 +1,15 @@
-from dnd import *
+from dnd import AttackBuilder, HitOutcome, TurnBuilder, d
 
 
 def test_resolve_hit():
-    test_attack = AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2).build()
+    test_attack = AttackBuilder(d(10))\
+        .prof(3)\
+        .amod(3)\
+        .adv()\
+        .gwm()\
+        .attbon(3)\
+        .dmgbon(2)\
+        .build()
     assert 0.6525 == test_attack.resolve_hit(15)
 
 
@@ -17,13 +24,29 @@ def test_resolve_attack():
 
 
 def test_resolve_crit_attack():
-    assert 1.0000000000000002 == AttackBuilder(d(1)).attbon(-20).crit(0).resolve(0).p(2)
+    assert 1.0000000000000002 == AttackBuilder(d(1))\
+        .attbon(-20)\
+        .crit(0)\
+        .resolve(0)\
+        .p(2)
 
 
 def test_resolve_turn_attacks():
     damage = TurnBuilder()\
-        .attack(AttackBuilder(d(10)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2), times=2)\
-        .attack(AttackBuilder(d(4)).prof(3).amod(3).adv().gwm().attbon(3).dmgbon(2))\
+        .attack(AttackBuilder(d(10))
+                .prof(3)
+                .amod(3)
+                .adv()
+                .gwm()
+                .attbon(3)
+                .dmgbon(2), times=2)\
+        .attack(AttackBuilder(d(4))
+                .prof(3)
+                .amod(3)
+                .adv()
+                .gwm()
+                .attbon(3)
+                .dmgbon(2))\
         .dmgroll(d(2, 8))\
         .resolve(15)
     damage_stats = damage.stats()

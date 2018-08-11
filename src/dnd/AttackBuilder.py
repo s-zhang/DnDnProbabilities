@@ -1,4 +1,3 @@
-from typing import *
 from .types import IntDist
 from pmf.Pmf import Pmf
 from .dice import d
@@ -53,12 +52,14 @@ class AttackBuilder:
         return self
 
     def gwm(self, is_great_weapon_master_or_sharpshooter=True):
-        self.is_great_weapon_master_or_sharpshooter = is_great_weapon_master_or_sharpshooter
+        self.is_great_weapon_master_or_sharpshooter = \
+            is_great_weapon_master_or_sharpshooter
         return self
 
     @staticmethod
     def __lucky_roll(attack_roll: Pmf[int]):
-        return attack_roll.map_nested(lambda roll: attack_roll if roll == 1 else roll)
+        return attack_roll.map_nested(
+            lambda roll: attack_roll if roll == 1 else roll)
 
     def build(self):
         damage_bonus = self.damage_bonus
@@ -69,14 +70,19 @@ class AttackBuilder:
 
         if self.is_adv:
             if self.is_lucky:
-                attack_roll = attack_roll.map_nested(lambda roll1: attack_roll.adv()
-                    if roll1 == 1 else self.__lucky_roll(attack_roll).map_pmf(lambda roll2: max(roll2, roll1)))
+                attack_roll = attack_roll.map_nested(
+                    lambda roll1: attack_roll.adv()
+                    if roll1 == 1
+                    else self.__lucky_roll(attack_roll).map_pmf(
+                        lambda roll2: max(roll2, roll1)))
             else:
                 attack_roll = attack_roll.adv()
         elif self.is_lucky:
             attack_roll = self.__lucky_roll(attack_roll)
 
-        attack_bonus = self.attack_bonus + self.proficiency_bonus + self.ability_modifier
+        attack_bonus = self.attack_bonus + \
+            self.proficiency_bonus + \
+            self.ability_modifier
 
         if self.is_great_weapon_master_or_sharpshooter:
             damage_bonus += 10
@@ -90,4 +96,5 @@ class AttackBuilder:
 
     def resolve(self, armor_class: IntDist) -> Pmf[int]:
         attack = self.build()
-        return attack.resolve(pmf.to_pmf(armor_class)).map_pmf(lambda outcome: outcome.damage)
+        return attack.resolve(pmf.to_pmf(armor_class)).map_pmf(
+            lambda outcome: outcome.damage)

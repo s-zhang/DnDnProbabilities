@@ -1,4 +1,4 @@
-from typing import *
+from typing import Dict
 from pmf.Pmf import Pmf
 import matplotlib.pyplot as plt
 

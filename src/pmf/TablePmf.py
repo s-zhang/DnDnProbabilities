@@ -1,4 +1,4 @@
-from typing import *
+from typing import TypeVar, Dict, Tuple, Iterator
 from .Pmf import Pmf, IPmfFactory
 
 TOutcome = TypeVar("TOutcome")
@@ -16,4 +16,6 @@ class TablePmf(Pmf[TOutcome]):
         return self.table[outcome]
 
     def scale_probability(self, scale: float):
-        return self._pmf_factory.table({outcome: probability * scale for outcome, probability in self.table.items()})
+        return self._pmf_factory.table({outcome: probability * scale
+                                        for outcome, probability
+                                        in self.table.items()})

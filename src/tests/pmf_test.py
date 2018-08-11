@@ -27,7 +27,8 @@ def test_equal():
 
 
 def test_union_generic():
-    test_union = pmf.table({"a": 0.1, "b": 0.2}).union(pmf.table({"b": 0.4, "c": 0.3}))
+    test_union = pmf.table({"a": 0.1, "b": 0.2})\
+        .union(pmf.table({"b": 0.4, "c": 0.3}))
     assert 0.6000000000000001 == test_union.p("b")
     assert 0.1 == test_union.p("a")
 

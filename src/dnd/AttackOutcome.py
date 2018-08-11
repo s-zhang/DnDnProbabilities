@@ -7,7 +7,8 @@ class AttackOutcome:
         self.damage = damage
 
     def __eq__(self, other):
-        return self.damage == other.damage and self.hit_outcome == other.hit_outcome
+        return self.damage == other.damage and \
+            self.hit_outcome == other.hit_outcome
 
     def __hash__(self):
         return hash((self.damage, self.hit_outcome))

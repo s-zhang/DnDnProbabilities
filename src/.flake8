@@ -1,0 +1,2 @@
+[flake8]
+exclude = builds.py,demo.py,old_scripts

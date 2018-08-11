@@ -1,4 +1,4 @@
-from typing import *
+from typing import TypeVar
 from .Pmf import IPmfFactory
 from .TablePmf import TablePmf
 

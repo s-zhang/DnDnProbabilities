@@ -1,7 +1,8 @@
-from typing import *
+from typing import TypeVar, List, Dict, Iterator, Tuple, Generic, Any, Callable
 import functools
 import itertools
 import operator
+from abc import ABC, abstractmethod
 
 TOutcome = TypeVar("TOutcome")
 
@@ -22,7 +23,8 @@ class Pmf(Generic[TOutcome]):
     def __str__(self) -> str:
         lines = []
         for outcome, probability in self:
-            lines.append("{}: {:.3f}".format(self.outcome_to_str(outcome), probability))
+            lines.append("{}: {:.3f}".format(self.outcome_to_str(outcome),
+                                             probability))
         return "\n".join(lines)
 
     def coerce(self, obj: Any) -> "Pmf[Any]":
@@ -32,14 +34,15 @@ class Pmf(Generic[TOutcome]):
         return map(lambda outcome_probability: f(*outcome_probability), self)
 
     def map_pmf(self, f: Callable[[TOutcome], Any]) -> "Pmf[Any]":
-        pmf = {}
+        table = {}
         for outcome, probability in self.map(lambda o, p: (f(o), p)):
-            pmf[outcome] = pmf.get(outcome, 0) + probability
-        return self._pmf_factory.from_table(pmf)
+            table[outcome] = table.get(outcome, 0) + probability
+        return self._pmf_factory.from_table(table)
 
     def map_nested(self, f: Callable[[TOutcome], Any]) -> "Pmf[Any]":
-        return functools.reduce(self.__class__.union, self.map(lambda outcome, probability:
-                                                               self.coerce(f(outcome)).scale_probability(probability)))
+        return functools.reduce(self.__class__.union, self.map(
+            lambda outcome, probability:
+                self.coerce(f(outcome)).scale_probability(probability)))
 
     def __eq__(self, other) -> "Pmf[bool]":
         return self.bool_op(operator.__eq__, other)
@@ -73,15 +76,18 @@ class Pmf(Generic[TOutcome]):
         joint = self._pmf_factory.joint([self, other])
         return joint.map_pmf(lambda outcome: op(*outcome))
 
-    def bool_op(self, op: Callable[[TOutcome, Any], bool], other: Any) -> "Pmf[bool]":
+    def bool_op(self,
+                op: Callable[[TOutcome, Any], bool],
+                other: Any) -> "Pmf[bool]":
         bool_pmf = self.op(op, other)
-        return bool_pmf.union(self._pmf_factory.from_table({True: 0, False: 0}))
+        return bool_pmf.union(
+            self._pmf_factory.from_table({True: 0, False: 0}))
 
     def union(self, other) -> "Pmf[TOutcome]":
-        pmf = {}
+        table = {}
         for outcome, probability in itertools.chain(self, other):
-            pmf[outcome] = pmf.get(outcome, 0) + probability
-        return self._pmf_factory.from_table(pmf)
+            table[outcome] = table.get(outcome, 0) + probability
+        return self._pmf_factory.from_table(table)
 
     def scale_probability(self, scale: float) -> "Pmf[TOutcome]":
         raise NotImplementedError
@@ -90,21 +96,27 @@ class Pmf(Generic[TOutcome]):
         return self.map_pmf(lambda outcome: getattr(outcome, item))
 
 
-class IPmfFactory:
+class IPmfFactory(ABC):
+    @abstractmethod
     def from_object(self, obj: Any) -> Pmf[Any]:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def from_table(self, table: Dict[TOutcome, float]) -> Pmf[TOutcome]:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def joint(self, pmfs: List[Pmf[TOutcome]]) -> Pmf[Tuple]:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def ints(self, probabilities: List[float], offset: int) -> Pmf[int]:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def table(self, table: Dict[TOutcome, float]) -> Pmf[TOutcome]:
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def const(self, constant: TOutcome) -> Pmf[TOutcome]:
-        raise NotImplementedError
+        ...
