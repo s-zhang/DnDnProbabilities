@@ -1,5 +1,6 @@
 import pmf
 from dnd import die, d
+from pmf import *
 
 
 def test_addition():
@@ -10,6 +11,15 @@ def test_addition():
 
 def test_advantage():
     assert 0.28 == d(5).adv().p(4)
+
+    def adv_test_helper(n_outcomes, n_adv):
+        expected = joint((d(1, n_outcomes),) * (n_adv + 1)).map_pmf(max)
+        test = d(1, n_outcomes).adv(n_adv)
+        for o in range(1, n_outcomes + 1):
+            assert expected.p(o) == test.p(o)
+
+    for i in range(3):
+        adv_test_helper(4, i)
 
 
 def test_greater_or_equal_than():
@@ -51,3 +61,15 @@ def test_if():
 
 def test_radd():
     assert (1 + d(3)).p(3) == (d(3) + 1).p(3)
+
+
+def test_neg():
+    assert 0.75 == (-ints([0.25, 0.75], 2)).p(-3)
+
+
+def test_sub():
+    assert 0.75 == (ints([0.25, 0.75]) - 2).p(-1)
+
+
+def test_rsub():
+    assert 0.25 == (2 - ints([0.25, 0.75])).p(2)

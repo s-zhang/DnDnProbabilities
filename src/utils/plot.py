@@ -23,9 +23,9 @@ def plot_builds(builds: Dict[str, Pmf[int]]):
         plot_at_least(damage, name)
 
     # Shrink current axis's height by 10% on the bottom
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0 + box.height * 0.2,
-                     box.width, box.height * 0.9])
+    #box = ax.get_position()
+    #ax.set_position([box.x0, box.y0 + box.height * 0.2,
+    #                 box.width, box.height * 0.9])
 
     ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),
               fancybox=True, shadow=True, ncol=1)

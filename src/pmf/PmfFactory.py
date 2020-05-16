@@ -27,7 +27,7 @@ class PmfFactory(IPmfFactory):
     def joint(self, pmfs: List[Pmf[TOutcome]]) -> Pmf[Tuple]:
         return JointPmf(pmfs, self)
 
-    def ints(self, probabilities: List[float], offset: int) -> Pmf[int]:
+    def ints(self, probabilities: List[float], offset: int = 0) -> Pmf[int]:
         return IntegerInterval(probabilities, offset, self)
 
     def table(self, table: Dict[TOutcome, float]) -> Pmf[TOutcome]:

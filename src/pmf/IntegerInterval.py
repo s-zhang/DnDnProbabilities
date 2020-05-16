@@ -28,6 +28,7 @@ class PmfStats:
 
 
 class IntegerInterval(Pmf[int]):
+
     def __init__(self,
                  probabilities: List[float],
                  offset: int,
@@ -54,12 +55,17 @@ class IntegerInterval(Pmf[int]):
 
     def cdf(self):
         if self.__cdf is None:
-            self.__cdf = []
-            prefix_sum = 0
-            for probability in self.probabilities:
-                self.__cdf.append(prefix_sum)
-                prefix_sum += probability
+            self.__cdf = self.__compute_cdf(self.probabilities)
         return self.__cdf
+
+    @staticmethod
+    def __compute_cdf(probabilities: List[float]) -> List[float]:
+        prefix_sum = 0
+        cdf = []
+        for probability in probabilities:
+            cdf.append(prefix_sum)
+            prefix_sum += probability
+        return cdf
 
     def __iter__(self) -> Iterator[Tuple[int, float]]:
         return map(lambda i: (self.offset + i, self.probabilities[i]),
@@ -92,13 +98,21 @@ class IntegerInterval(Pmf[int]):
     def __radd__(self, other):
         return self.__add__(other)
 
-    def adv(self):
-        probabilities = []
-        cdf = self.cdf()
-        for i in range(len(self.probabilities)):
-            probabilities.append(cdf[i] * self.probabilities[i] +
-                                 self.probabilities[i] *
-                                 (cdf[i] + self.probabilities[i]))
+    def __sub__(self, other):
+        return self + (-other)
+
+    def __rsub__(self, other):
+        return -self + other
+
+    def __neg__(self):
+        return self._pmf_factory.ints(list(reversed(self.probabilities)), -self.offset - self.size + 1)
+
+    def adv(self, n=1):
+        probabilities = list.copy(self.probabilities)
+        for _ in range(n):
+            cdf = self.__compute_cdf(probabilities)
+            for i in range(len(probabilities)):
+                probabilities[i] = cdf[i] * self.probabilities[i] + probabilities[i] * (self.cdf()[i] + self.probabilities[i])
         return self._pmf_factory.ints(probabilities, self.offset)
 
     def ge(self, threshold: int):

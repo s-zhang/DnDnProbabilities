@@ -9,7 +9,7 @@ class AttackBuilder:
     def __init__(self, damage_base: IntDist):
         self.damage_base = damage_base
         self.damage_bonus = 0
-        self.is_adv = False
+        self.n_adv = 0
         self.is_lucky = False
         self.proficiency_bonus = 0
         self.ability_modifier = 0
@@ -26,8 +26,8 @@ class AttackBuilder:
         self.damage_bonus += damage_bonus
         return self
 
-    def adv(self, is_adv=True):
-        self.is_adv = is_adv
+    def adv(self, n=1):
+        self.n_adv = n
         return self
 
     def lucky(self, is_lucky=True):
@@ -68,17 +68,13 @@ class AttackBuilder:
 
         attack_roll = d(20)
 
-        if self.is_adv:
-            if self.is_lucky:
-                attack_roll = attack_roll.map_nested(
-                    lambda roll1: attack_roll.adv()
-                    if roll1 == 1
-                    else self.__lucky_roll(attack_roll).map_pmf(
-                        lambda roll2: max(roll2, roll1)))
+        if self.is_lucky:
+            if self.n_adv != 0:
+                raise NotImplementedError
             else:
-                attack_roll = attack_roll.adv()
-        elif self.is_lucky:
-            attack_roll = self.__lucky_roll(attack_roll)
+                attack_roll = self.__lucky_roll(attack_roll)
+        else:
+            attack_roll = attack_roll.adv(self.n_adv)
 
         attack_bonus = self.attack_bonus + \
             self.proficiency_bonus + \

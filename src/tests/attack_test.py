@@ -14,9 +14,9 @@ def test_resolve_hit():
 
 
 def test_lucky_hit():
-    test_attack = AttackBuilder(d(1)).adv().lucky().build()
+    test_attack = AttackBuilder(d(1)).lucky().build()
     hit_outcome = test_attack.resolve_hit(15)
-    assert 0.10212500000000002 == hit_outcome.p(HitOutcome.CRITICAL_HIT)
+    assert 0.052500000000000005 == hit_outcome.p(HitOutcome.CRITICAL_HIT)
 
 
 def test_resolve_attack():
